@@ -1,0 +1,68 @@
+- name: Check if KESL is already installed
+  stat:
+    path: /opt/kaspersky/kesl/bin/kesl-control
+  register: kesl_installed
+  tags: always
+
+- name: Check agent URL
+  uri:
+    url: "{{ agent_url }}"
+    method: GET
+    return_content: no
+    timeout: 30
+    validate_certs: no
+  register: agent_url_check
+  tags: agent
+
+- name: Download and install agent (Ubuntu)
+  block:
+    - name: Install required packages (Ubuntu)
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - wget
+        - curl
+      tags: packages
+      become: yes
+
+    - name: Download agent package
+      get_url:
+        url: "{{ agent_url }}"
+        dest: "{{ temp_dir_linux }}/agent"
+        mode: '0755'
+      become: yes
+    
+    - name: Install agent
+      command: sh "{{ temp_dir_linux }}/agent"
+      become: yes
+    
+    - name: Clean up agent package
+      file:
+        path: "{{ temp_dir_linux }}/agent"
+        state: absent
+      become: yes
+
+    - name: Download antivirus package
+      get_url:
+        url: "{{ antivirus_url }}"
+        dest: "{{ temp_dir_linux }}/antivirus"
+        mode: '0755'
+      become: yes
+    
+    - name: Install antivirus
+      command: sh "{{ temp_dir_linux }}/antivirus"
+      become: yes
+    
+    - name: Clean up antivirus package
+      file:
+        path: "{{ temp_dir_linux }}/antivirus"
+        state: absent
+      become: yes
+  when: not kesl_installed.stat.exists and agent_url_check.status == 200
+
+- name: Show message if KESL is already installed
+  debug:
+    msg: "KESL is already installed. Skipping installation."
+  when: kesl_installed.stat.exists
+  tags: always

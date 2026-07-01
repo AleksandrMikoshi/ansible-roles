@@ -1,0 +1,4 @@
+installer_name: "kaspersky_installer.exe"
+download_url: "{{ kes_url }}{{ windows_installer }}"
+install_params: "/s"
+service_pattern: "AVP.KES.*"

@@ -1,4 +1,4 @@
 - name: NextCloud
   hosts: host_group
   roles:
-    - nc
+    - nextcloud

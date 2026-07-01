@@ -1,0 +1,12 @@
+temp_dir_linux: '/tmp'
+temp_dir_windows: 'C:\TMP\kaspersky'
+
+kes_url: "http://kaspersky.server.com/dlpkg?id="
+
+windows_installer: "******"
+
+deb_agent_id: "******"
+deb_antivirus_id: "******"
+
+rpm_agent_id: "******"
+rpm_antivirus_id: "******"

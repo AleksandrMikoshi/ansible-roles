@@ -1,0 +1,96 @@
+- name: Проверить, установлен ли Kaspersky
+  ansible.windows.win_service_info:
+    name: "{{ service_pattern }}"
+    register: kesl_service
+    failed_when: false
+    changed_when: false
+    tags: always
+
+- name: Создать временный каталог для Kaspersky
+  win_file:
+    path: "{{ ansible_env.TEMP }}\\kaspersky_install"
+    state: directory
+  tags: prep
+  when: not kesl_service.services
+
+- name: Скачать установщик Kaspersky
+  win_get_url:
+    url: "{{ download_url }}"
+    dest: "{{ ansible_env.TEMP }}\\kaspersky_install\\{{ installer_name }}"
+  register: download_result
+  retries: 3
+  delay: 10
+  until: download_result is succeeded
+  tags: download
+  when: not kesl_service.services
+
+- name: Установить Kaspersky тихо
+  win_package:
+    path: "{{ ansible_env.TEMP }}\\kaspersky_install\\{{ installer_name }}"
+    arguments: "{{ install_params }}"
+    state: present
+  register: install_result
+  tags: install
+  when: not kesl_service.services
+
+- name: Найти фактическое имя службы после установки
+  ansible.windows.win_service_info:
+    name: "{{ service_pattern }}"
+  register: kesl_service_after
+  changed_when: false
+  when: not kesl_service.services
+
+    # ---- Логика выбора имени службы ----
+- name: Сохранить имя службы (если Kaspersky уже установлен)
+  set_fact:
+    actual_service_name: "{{ kesl_service.services[0].name }}"
+  when:
+    - kesl_service is defined
+    - "'services' in kesl_service"
+    - kesl_service.services
+
+- name: Сохранить имя службы (если Kaspersky только что установлен)
+  set_fact:
+    actual_service_name: "{{ kesl_service_after.services[0].name }}"
+  when:
+    - kesl_service_after is defined
+    - "'services' in kesl_service_after"
+    - kesl_service_after.services
+
+    # ---- Проверка запуска службы ----
+- name: Убедиться, что служба Kaspersky запущена
+  win_service:
+    name: "{{ actual_service_name | default(service_pattern) }}"
+    state: started
+  ignore_errors: yes
+  when: actual_service_name is defined
+
+    # ---- Очистка ----
+- name: Удалить установщик
+  win_file:
+    path: "{{ ansible_env.TEMP }}\\kaspersky_install\\{{ installer_name }}"
+    state: absent
+  tags: cleanup
+  when: install_result is defined
+
+- name: Удалить временный каталог для Kaspersky
+  win_file:
+    path: "{{ ansible_env.TEMP }}\\kaspersky_install"
+    state: absent
+  tags: cleanup
+  when: install_result is defined
+
+    # ---- Ребут ----
+- name: Немедленная перезагрузка системы
+  win_reboot:
+    msg: "Выполняется перезагрузка системы"
+    pre_reboot_delay: 5
+    post_reboot_delay: 60
+  tags: reboot
+
+    # ---- Сообщение ----
+- name: Сообщение, если Kaspersky уже установлен
+  ansible.builtin.debug:
+    msg: "Антивирус Касперского уже установлен"
+  when: kesl_service.services
+  tags: always

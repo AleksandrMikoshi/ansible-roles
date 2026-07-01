@@ -1,0 +1,3 @@
+# Для RHEL/CentOS
+agent_url: "{{ kes_url }}{{ rpm_agent_id }}"
+antivirus_url: "{{ kes_url }}{{ rpm_antivirus_id }}"

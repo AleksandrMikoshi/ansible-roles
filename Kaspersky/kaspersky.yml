@@ -1,0 +1,4 @@
+- name: Kaspersky
+  hosts: host_group
+  roles:
+    - kaspersky
