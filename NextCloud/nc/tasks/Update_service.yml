@@ -1,0 +1,112 @@
+- name: Update service Nextcloud
+  become: yes
+  block:
+  
+    - name: 1. Скачать новую версию NextCloud {{ nextcloud_version }}
+      get_url:
+        url: "{{ download_url }}"
+        dest: "/tmp/nextcloud-{{ nextcloud_version }}.zip"
+        mode: '0644'
+      register: download_result
+    
+    - name: 2. Очистить временные файлы
+      file:
+        path: /tmp/nextcloud
+        state: absent
+        
+    - name: 3. Распаковать архив
+      unarchive:
+        src: "/tmp/nextcloud-{{ nextcloud_version }}.zip"
+        dest: "/tmp/"
+        remote_src: yes
+        creates: "/tmp/nextcloud"
+
+    - name: 4. Переместить и переименовать каталог
+      command: "mv /tmp/nextcloud {{ nextcloud_new_path }}"
+      args:
+        creates: "{{ nextcloud_new_path }}"
+
+    - name: 5. Скопировать файлы конфигурации
+      copy:
+        src: "{{ nextcloud_current_path }}/config/"
+        dest: "{{ nextcloud_new_path }}/config/"
+        remote_src: yes
+        directory_mode: yes
+
+    - name: 6. Включить режим обслуживания
+      command: "php {{ nextcloud_current_path }}/occ maintenance:mode --on"
+      register: maintenance_on
+      become: true
+      become_user: "{{ nextcloud_user }}"
+
+    - name: 7. Остановить Apache
+      service:
+        name: apache2
+        state: stopped
+
+    - name: 8. Установить права на новый каталог
+      file:
+        path: "{{ nextcloud_new_path }}"
+        owner: "{{ nextcloud_user }}"
+        group: "{{ nextcloud_user }}"
+        recurse: yes
+
+    - name: Установить права 750 на директории
+      shell: "find {{ nextcloud_new_path }} -type d -exec chmod 750 {} \\;"
+
+    - name: Установить права 640 на файлы
+      shell: "find {{ nextcloud_new_path }} -type f -exec chmod 640 {} \\;"
+
+    - name: 9. Удалить родной каталог приложений и создать симлинк
+      file:
+        path: "{{ nextcloud_new_path }}/apps"
+        state: absent
+
+    - name: Создать симлинк для приложений
+      file:
+        src: "{{ apps_path }}"
+        dest: "{{ nextcloud_new_path }}/apps"
+        state: link
+
+    - name: 10. Пересоздать симлинк самого приложения
+      file:
+        path: "{{ nextcloud_current_path }}"
+        state: absent
+
+    - name: Создать симлинк на новую версию
+      file:
+        src: "{{ nextcloud_new_path }}"
+        dest: "{{ nextcloud_current_path }}"
+        state: link
+
+    - name: 11. Запустить Apache
+      service:
+        name: apache2
+        state: started
+
+    - name: 12. Перезапустить PHP-FPM
+      service:
+        name: "{{ php_service }}"
+        state: restarted
+
+    - name: 13. Выполнить upgrade
+      command: "php {{ nextcloud_current_path }}/occ upgrade"
+      register: upgrade_result
+      become: true
+      become_user: "{{ nextcloud_user }}"
+
+    - name: 14. Отключить режим обслуживания
+      command: "php {{ nextcloud_current_path }}/occ maintenance:mode --off"
+      when: maintenance_on is defined
+      become: true
+      become_user: "{{ nextcloud_user }}"
+
+    - name: Очистить временные файлы
+      file:
+        path: "/tmp/nextcloud-{{ nextcloud_version }}.zip"
+        state: absent
+
+    - name: Вывести результат обновления
+      debug:
+        msg: "{{ upgrade_result.stdout_lines }}"
+      when: upgrade_result is defined

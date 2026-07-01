@@ -1,0 +1,5 @@
+- name: "Обновление NextCloud"
+  block: 
+    - ansible.builtin.import_tasks: Update_service.yml
+  tags:
+    - update_service
